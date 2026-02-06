@@ -68,6 +68,15 @@ const PatientFlow = () => {
 
 const LoginScreen = () => {
   const { loginAdmin } = useApp();
+  const [username, setUsername] = React.useState('admin');
+  const [password, setPassword] = React.useState('admin');
+  const [error, setError] = React.useState('');
+
+  const handleLogin = async () => {
+      const success = await loginAdmin(username, password);
+      if (!success) setError('Credenciales incorrectas');
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-dark-header p-4">
       <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
@@ -76,14 +85,27 @@ const LoginScreen = () => {
         </div>
         <h2 className="text-2xl font-bold text-center text-gray-900 mb-6">Acceso Personal</h2>
         <div className="space-y-4">
-          <input type="text" placeholder="Usuario" className="w-full p-3 border border-gray-300 rounded-lg" defaultValue="admin" />
-          <input type="password" placeholder="Contraseña" className="w-full p-3 border border-gray-300 rounded-lg" defaultValue="password" />
+          <input 
+            type="text" 
+            placeholder="Usuario" 
+            className="w-full p-3 border border-gray-300 rounded-lg" 
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+          <input 
+            type="password" 
+            placeholder="Contraseña" 
+            className="w-full p-3 border border-gray-300 rounded-lg" 
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
           <button 
-            onClick={loginAdmin}
+            onClick={handleLogin}
             className="w-full py-3 bg-primary text-white font-bold rounded-lg hover:bg-primary-dark transition-all"
           >
             Iniciar Sesión
           </button>
+          {error && <p className="text-red-500 text-center text-sm font-bold">{error}</p>}
         </div>
         <p className="text-xs text-center text-gray-400 mt-6">Sistema Interno Clínica La Feria v1.0</p>
       </div>

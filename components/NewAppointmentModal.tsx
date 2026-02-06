@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { MUTUAS, SPECIALTIES, VISIT_TYPES, MOCK_PATIENTS } from '../constants';
-import { Appointment, Patient } from '../types';
+import { useApp } from '../context';
+import { Appointment, Patient, DbMutua, DbEspecialidad, DbServicio } from '../types';
+import { clientService } from '../services/clientService';
+import { catalogService } from '../services/catalogService';
 
 interface NewAppointmentModalProps {
   isOpen: boolean;
@@ -20,9 +22,18 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   appointmentToEdit 
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState<Patient[]>([]);
+  const [searchResults, setSearchResults] = useState<any[]>([]); // Using mapped type or DbCliente
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   
+  // Context for Availability
+  const { appointments } = useApp();
+  
+  // Catalog State
+  // Catalog State - Initialize with default static options to prevent empty dropdowns
+  const [mutuas, setMutuas] = useState<DbMutua[]>([{ id_mutua: -1, nombre: 'Privado' }]);
+  const [specialties, setSpecialties] = useState<DbEspecialidad[]>([{ id_especialidad: 0, nombre: 'Todas' }]);
+  const [services, setServices] = useState<DbServicio[]>([]);
+
   // Logic states
   const [isPatientSelected, setIsPatientSelected] = useState(false);
   const [isNewPatientMode, setIsNewPatientMode] = useState(false);
@@ -40,43 +51,130 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     phone: '',
     email: '',
     address: '',
-    company: MUTUAS[0].id,
-    specialty: SPECIALTIES[0].id,
-    reason: VISIT_TYPES[0].id,
+    company: 0,
+    specialty: 0,
+    reason: 0,
     date: initialDate || new Date().toISOString().split('T')[0],
     time: initialTime || '',
     source: 'Phone' as 'Phone' | 'WhatsApp' | 'Web' | 'Presencial'
   });
 
-  // Helper: Reverse lookup ID from Title
-  const getIdByTitle = (list: any[], title: string, defaultId: string) => {
-    return list.find(item => item.title === title)?.id || defaultId;
-  };
+  // Load Catalog (Mutuas)
+  useEffect(() => {
+    const loadCatalog = async () => {
+        try {
+            const m = await catalogService.getMutuas();
+            // Merge with static Private option
+            const allMutuas = [
+                { id_mutua: -1, nombre: 'Privado' }, 
+                ...m
+            ];
+            setMutuas(allMutuas);
+            
+            // Set default company to -1 (Privado) if currently 0 or invalid
+            setFormData(prev => {
+                // If current company is 0 (default init) or not found in new list, default to -1
+                const exists = allMutuas.find(x => x.id_mutua === prev.company);
+                if (!exists || prev.company === 0) return { ...prev, company: -1 };
+                return prev;
+            });
+        } catch(e) { 
+            console.error('Error loading mutuas:', e);
+            // Even on error, keep Privado
+            setMutuas([{ id_mutua: -1, nombre: 'Privado' }]);
+        }
+    };
+    if (isOpen) loadCatalog();
+  }, [isOpen]);
+
+  // Load Specialties when Mutua changes
+  useEffect(() => {
+    const loadSpecs = async () => {
+        // If company is 0, it might be uninitialized, but we default to -1 now. 
+        // If it's truly 0 (which shouldn't happen with our logic, unless set explicitly), handle it.
+        const idMutua = formData.company === -1 ? null : formData.company;
+        
+        try {
+            const s = await catalogService.getEspecialidades(idMutua);
+            
+            // Prepend "Todas" option
+            const allSpecs = [{ id_especialidad: 0, nombre: 'Todas' }, ...s];
+            setSpecialties(allSpecs);
+            
+            // Auto-select "Todas" (0) if current specialty is invalid for new list
+            setFormData(current => {
+                 const exists = s.find(x => x.id_especialidad === current.specialty);
+                 // If not found, revert to 0 (Todas)
+                 if (!exists && current.specialty !== 0) {
+                     return { ...current, specialty: 0 };
+                 }
+                 return current;
+            });
+        } catch (e) { 
+            console.error(e); 
+            setSpecialties([{ id_especialidad: 0, nombre: 'Todas' }]);
+        }
+    };
+    loadSpecs();
+  }, [formData.company]);
+
+  // Load Services when specialty/mutua changes
+  useEffect(() => {
+      const loadServices = async () => {
+          // 0 is valid now (Todas), so checks strictly for defined/not-nullish if we used null, but we use 0.
+          // We always load services if company is selected (company is 0 by default, handled?)
+          // Check: if formData.specialty is 0, we pass 0 -> getServicios handles 0 as "All"
+          
+          const idMutua = formData.company === -1 ? null : formData.company;
+          const s = await catalogService.getServicios(formData.specialty, idMutua);
+          setServices(s);
+          
+          // Validate reason/service selection logic...
+          setFormData(current => {
+              const exists = s.find(x => x.id_servicio === current.reason);
+               if (!exists) {
+                   return { ...current, reason: s.length > 0 ? s[0].id_servicio : 0 };
+               }
+               return current;
+          });
+      };
+      // Trigger whenever specialty or company changes
+      loadServices();
+  }, [formData.specialty, formData.company]);
+
 
   useEffect(() => {
     if (isOpen) {
       if (appointmentToEdit) {
         // EDIT MODE: Pre-fill data
-        const [first, ...rest] = appointmentToEdit.patientName.split(' ');
-        const last = rest.join(' ');
-
+        // For simplicity in this demo, strict editing of existing IDs is complex if IDs were random strings before.
+        // We do best effort mapping.
+        
+        // Split name
+        const [first, ...rest] = (appointmentToEdit.patientName || '').split(' ');
+        
         setFormData({
           firstName: first || '',
-          lastName: last || '',
-          documentNumber: appointmentToEdit.patientId,
-          phone: appointmentToEdit.phone,
-          email: appointmentToEdit.email,
+          lastName: rest.join(' ') || '',
+          documentNumber: appointmentToEdit.patientId || '',
+          phone: appointmentToEdit.phone || '',
+          email: appointmentToEdit.email || '',
           address: appointmentToEdit.address || '',
-          company: getIdByTitle(MUTUAS, appointmentToEdit.company, MUTUAS[0].id),
-          specialty: getIdByTitle(SPECIALTIES, appointmentToEdit.specialty, SPECIALTIES[0].id),
-          reason: getIdByTitle(VISIT_TYPES, appointmentToEdit.service || '', VISIT_TYPES[0].id),
-          date: appointmentToEdit.date,
-          time: appointmentToEdit.time,
-          source: appointmentToEdit.source
+          // Assuming appointmentToEdit has IDs coming from getAppointments() mapping
+          // But getAppointments maps Company NAME to 'company'.
+          // We need to reverse map or fix getAppointments to provide IDs.
+          // For now, let's just keep '0' if we can't find it, user has to reselect.
+          // For now, let's just keep '0' if we can't find it, user has to reselect.
+          company: mutuas.find(m => m.nombre === appointmentToEdit.company)?.id_mutua || (appointmentToEdit.company === 'Privado' ? -1 : 0),
+          specialty: 0, // Hard to map back name to ID without full list loaded first
+          reason: 0,
+          date: appointmentToEdit.date || '',
+          time: appointmentToEdit.time || '',
+          source: (appointmentToEdit.source as any) || 'Phone'
         });
         
         setIsPatientSelected(true); // Lock patient part conceptually
-        setSearchTerm(appointmentToEdit.patientId);
+        setSearchTerm(appointmentToEdit.patientId || '');
         setIsNewPatientMode(true); // Allow editing patient details in edit mode
         setPatientSuccessMsg(null);
         setHasAttemptedSave(false);
@@ -87,7 +185,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         resetForm();
       }
     }
-  }, [isOpen, initialDate, initialTime, appointmentToEdit]);
+  }, [isOpen, initialDate, initialTime, appointmentToEdit, mutuas /* Re-run when mutuas loaded to map */]);
 
   const resetForm = () => {
     setFormData({
@@ -97,9 +195,9 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         phone: '',
         email: '',
         address: '',
-        company: MUTUAS[0].id,
-        specialty: SPECIALTIES[0].id,
-        reason: VISIT_TYPES[0].id,
+        company: mutuas[0]?.id_mutua || 0,
+        specialty: specialties[0]?.id_especialidad || 0,
+        reason: 0,
         date: initialDate || new Date().toISOString().split('T')[0],
         time: initialTime || '',
         source: 'Phone'
@@ -116,22 +214,35 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
 
   // Search Logic
   useEffect(() => {
-    if (isPatientSelected || isNewPatientMode) return; // Don't search if we are in a locked state
+    // Debounce search
+    const timer = setTimeout(async () => {
+        if (isPatientSelected || isNewPatientMode) return;
+        if (searchTerm.length < 2) {
+            setSearchResults([]);
+            setIsDropdownOpen(false);
+            return;
+        }
 
-    if (searchTerm.length < 2) {
-      setSearchResults([]);
-      setIsDropdownOpen(false);
-      return;
-    }
+        try {
+            const results = await clientService.search(searchTerm);
+            // Map DbCliente to UI friendly
+            const mapped = results.map(c => ({
+                id: c.dni, // Use DNI as ID
+                firstName: c.nombre,
+                lastName: c.apellidos,
+                documentNumber: c.dni,
+                phone: c.telefono || '',
+                email: c.email || '',
+                address: c.direccion || ''
+            }));
+            setSearchResults(mapped);
+            setIsDropdownOpen(true);
+        } catch(e) {
+            console.error(e);
+        }
+    }, 300);
 
-    const lowerTerm = searchTerm.toLowerCase();
-    const results = MOCK_PATIENTS.filter(p => 
-      p.documentNumber.toLowerCase().includes(lowerTerm) || 
-      `${p.firstName} ${p.lastName}`.toLowerCase().includes(lowerTerm)
-    );
-
-    setSearchResults(results);
-    setIsDropdownOpen(true);
+    return () => clearTimeout(timer);
   }, [searchTerm, isPatientSelected, isNewPatientMode]);
 
   // Generate Slots based on selected Date
@@ -157,15 +268,35 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
        afternoon = ['16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30'];
     }
 
-    return { morning, afternoon, isClosed: false };
-  }, [formData.date]);
+    // Filter out occupied slots
+    // We normalize times to HH:MM to compare
+    const occupiedTimes = appointments
+        .filter(a => {
+            // Must match date
+            if (a.date !== formData.date) return false;
+            // Must be active
+            if (a.status === 'cancelled') return false;
+            // If editing, don't count itself as collision
+            if (appointmentToEdit && a.id === appointmentToEdit.id) return false;
+            return true;
+        })
+        .map(a => a.time.substring(0, 5)); // Take HH:MM from HH:MM:SS or HH:MM
+
+    const isSlotFree = (time: string) => !occupiedTimes.includes(time);
+
+    // Filter the arrays
+    const filteredMorning = morning.filter(isSlotFree);
+    const filteredAfternoon = afternoon.filter(isSlotFree);
+
+    return { morning: filteredMorning, afternoon: filteredAfternoon, isClosed: false };
+  }, [formData.date, appointments, appointmentToEdit]);
 
   // Helper to determine if search term looks like a DNI (has numbers) or Name (letters only)
   const isLikeDni = useMemo(() => {
     return /\d/.test(searchTerm);
   }, [searchTerm]);
 
-  const handlePatientSelect = (patient: Patient) => {
+  const handlePatientSelect = (patient: any) => {
     setFormData(prev => ({
       ...prev,
       firstName: patient.firstName,
@@ -242,7 +373,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       }
 
       // Simulate saving to DB
-      setPatientSuccessMsg("Cliente añadido correctamente");
+      setPatientSuccessMsg("Cliente añadido correctamente (guardar al final)");
       setIsNewPatientMode(false);
       setIsPatientSelected(true); // Now it's selected and locked
       setSearchTerm(formData.documentNumber);
@@ -270,15 +401,30 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         return;
     }
 
-    const companyTitle = MUTUAS.find(m => m.id === formData.company)?.title || '';
-    const specialtyTitle = SPECIALTIES.find(s => s.id === formData.specialty)?.title || '';
-    const serviceTitle = VISIT_TYPES.find(v => v.id === formData.reason)?.title || 'Consulta';
+    const companyTitle = mutuas.find(m => m.id_mutua === formData.company)?.nombre || '';
+    const specialtyTitle = specialties.find(s => s.id_especialidad === formData.specialty)?.nombre || '';
+    const serviceTitle = services.find(v => v.id_servicio === formData.reason)?.nombre || 'Consulta';
     
     onSubmit({
       id: appointmentToEdit?.id, // Pass back ID if editing
       patientName: `${formData.firstName} ${formData.lastName}`,
       patientId: formData.documentNumber,
-      company: companyTitle,
+      company: companyTitle, // We pass title back for UI convenience, context handles ID lookup or we should pass ID?
+      // Context addAppointment creates BookingState used by Service.
+      // We should probably pass the IDs in hidden fields or similar if Appointment type supports it.
+      // But Appointment type (frontend) uses strings mainly.
+      // Ideally we update Appointment type to strictly use IDs.
+      // For now, let's inject the IDs into the object, casting if necessary, 
+      // so the context can extract them.
+      
+      // Pass the raw form data IDs for the backend service:
+      // @ts-ignore
+      rawCompanyId: formData.company,
+      // @ts-ignore
+      rawSpecialtyId: formData.specialty,
+      // @ts-ignore
+      rawServiceId: formData.reason,
+      
       specialty: specialtyTitle,
       service: serviceTitle,
       date: formData.date,
@@ -367,7 +513,6 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                     <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider">Datos del Paciente</h3>
                  </div>
                  
-                 {/* Botón de Salir/Cancelar (X Roja) disponible si hay paciente seleccionado O se está creando uno nuevo */}
                  {(isPatientSelected || isNewPatientMode) && !appointmentToEdit && (
                      <button onClick={cancelSelection} className="text-xs text-red-500 hover:underline flex items-center gap-1 font-bold">
                          <span className="material-symbols-outlined text-base">close</span> 
@@ -400,7 +545,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                                <button
                                  key={p.id}
                                  onClick={() => handlePatientSelect(p)}
-                                 className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors flex items-center justify-between group"
+                                 className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors flex items-center justify-center group"
                                >
                                  <div>
                                    <div className="font-bold text-gray-800 text-sm group-hover:text-primary transition-colors">{p.firstName} {p.lastName}</div>
@@ -646,10 +791,10 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                         <div className="relative">
                           <select 
                             value={formData.company}
-                            onChange={(e) => setFormData({...formData, company: e.target.value})}
+                            onChange={(e) => setFormData({...formData, company: Number(e.target.value)})}
                             className="w-full p-2.5 bg-white border border-gray-200 rounded-lg text-sm appearance-none focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                           >
-                             {MUTUAS.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
+                             {mutuas.map(m => <option key={m.id_mutua} value={m.id_mutua}>{m.nombre}</option>)}
                           </select>
                           <span className="material-symbols-outlined absolute right-3 top-2.5 text-gray-400 pointer-events-none text-lg">expand_more</span>
                         </div>
@@ -661,10 +806,10 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                           <div className="relative">
                             <select 
                               value={formData.specialty}
-                              onChange={(e) => setFormData({...formData, specialty: e.target.value})}
+                              onChange={(e) => setFormData({...formData, specialty: Number(e.target.value)})}
                               className="w-full p-2.5 bg-white border border-gray-200 rounded-lg text-sm appearance-none focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                             >
-                               {SPECIALTIES.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                               {specialties.map(s => <option key={s.id_especialidad} value={s.id_especialidad}>{s.nombre}</option>)}
                             </select>
                             <span className="material-symbols-outlined absolute right-3 top-2.5 text-gray-400 pointer-events-none text-lg">expand_more</span>
                           </div>
@@ -674,10 +819,10 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                           <div className="relative">
                             <select 
                               value={formData.reason}
-                              onChange={(e) => setFormData({...formData, reason: e.target.value})}
+                              onChange={(e) => setFormData({...formData, reason: Number(e.target.value)})}
                               className="w-full p-2.5 bg-white border border-gray-200 rounded-lg text-sm appearance-none focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                             >
-                               {VISIT_TYPES.map(v => <option key={v.id} value={v.id}>{v.title}</option>)}
+                               {services.map(v => <option key={v.id_servicio} value={v.id_servicio}>{v.nombre}</option>)}
                             </select>
                             <span className="material-symbols-outlined absolute right-3 top-2.5 text-gray-400 pointer-events-none text-lg">expand_more</span>
                           </div>

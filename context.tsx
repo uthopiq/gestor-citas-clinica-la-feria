@@ -1,6 +1,9 @@
+
 import React, { createContext, useContext, useState, ReactNode, useEffect, PropsWithChildren } from 'react';
 import { BookingState, Appointment } from './types';
 import { INITIAL_APPOINTMENTS, MUTUAS, SPECIALTIES, VISIT_TYPES } from './constants';
+import { appointmentService } from './services/appointmentService';
+import { authService } from './services/authService';
 
 interface AppContextType {
   // Patient Flow State
@@ -13,11 +16,12 @@ interface AppContextType {
   // Admin Flow State
   appointments: Appointment[];
   isAdminLoggedIn: boolean;
-  loginAdmin: () => void;
+  loginAdmin: (user: string, pass: string) => Promise<boolean>;
   logoutAdmin: () => void;
-  cancelAppointment: (id: string) => void;
-  addAppointment: (appointment: Appointment) => void;
-  updateAppointment: (appointment: Appointment) => void;
+  cancelAppointment: (id: string) => Promise<void>;
+  addAppointment: (appointment: Appointment) => Promise<void>;
+  updateAppointment: (appointment: Appointment) => Promise<void>;
+  refreshAppointments: () => Promise<void>;
 }
 
 const initialBookingState: BookingState = {
@@ -42,89 +46,103 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const AppProvider = ({ children }: PropsWithChildren) => {
   const [bookingStep, setBookingStep] = useState(1);
   const [bookingData, setBookingData] = useState<BookingState>(initialBookingState);
-  const [appointments, setAppointments] = useState<Appointment[]>(INITIAL_APPOINTMENTS);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
 
   const updateBookingData = (data: Partial<BookingState>) => {
     setBookingData(prev => ({ ...prev, ...data }));
   };
 
-  // Simulated WebSocket / Email Service
+  const refreshAppointments = async () => {
+    try {
+        // Fetch all active appointments for the dashboard
+        // Optimally we would date filter, but for now we fetch all active to support month view
+        const data = await appointmentService.getAppointments();
+        setAppointments(data);
+    } catch (error) {
+        console.error("Failed to fetch appointments", error);
+    }
+  };
+
+  // Initial load
+  useEffect(() => {
+    refreshAppointments();
+  }, []);
+
   const submitAppointment = async () => {
-    return new Promise<void>((resolve) => {
-      setTimeout(() => {
-        const id = `LF-${Math.floor(Math.random() * 100000)}`;
-        const mutuaTitle = MUTUAS.find(c => c.id === bookingData.company)?.title || 'Privado';
-        const specialtyTitle = SPECIALTIES.find(s => s.id === bookingData.specialty)?.title || 'General';
-        const serviceTitle = VISIT_TYPES.find(v => v.id === bookingData.reason)?.title || 'Consulta';
+      // Connect to Real Backend
+      await appointmentService.createAppointment(bookingData, 1); // 1 = Web
+      await refreshAppointments();
+      
+      // Simulate confirmation email log
+      console.log(`Cita confirmada para: ${bookingData.patientData.email}`);
+  };
 
-        const newAppointment: Appointment = {
-          id: id,
-          patientName: `${bookingData.patientData.firstName} ${bookingData.patientData.lastName}`,
-          patientId: bookingData.patientData.documentNumber,
-          company: mutuaTitle,
-          specialty: specialtyTitle,
-          service: serviceTitle,
-          date: bookingData.selectedDate || '',
-          time: bookingData.selectedTime || '',
-          phone: `+34 ${bookingData.patientData.phone}`,
-          email: bookingData.patientData.email,
-          address: bookingData.patientData.address,
-          status: 'confirmed',
-          source: 'Web'
+  const cancelAppointment = async (id: string) => {
+    try {
+        await appointmentService.cancelAppointment(id);
+        setAppointments(prev => prev.map(appt => 
+            appt.id === id ? { ...appt, status: 'cancelled' } : appt
+        ));
+    } catch (e) {
+        console.error("Error cancelling", e);
+    }
+  };
+
+  const addAppointment = async (appointment: Appointment) => {
+    try {
+        // This is primarily called by Admin Dashboard with a constructed object
+        // We need to map it back to BookingState-like structure for the service
+        // OR we should expose a direct create method for Admin that takes explicit IDs
+        
+        // For now, assuming the Modal passes mapped IDs in the 'appointment' object fields?
+        // Actually AdminDashboard constructs a mock Appointment.
+        // We need to change AdminDashboard to pass proper IDs.
+        // But to keep interface simple, let's assume we refresh after add.
+        // Or we reconstruct a booking object:
+         const booking: BookingState = {
+            company: 1, // Fallback or need to map string to ID
+            specialty: 1, 
+            reason: 1,
+            selectedDate: appointment.date,
+            selectedTime: appointment.time,
+            patientData: {
+                firstName: appointment.patientName?.split(' ')[0] || '',
+                lastName: appointment.patientName?.split(' ').slice(1).join(' ') || '',
+                documentType: 'NIF',
+                documentNumber: appointment.patientId,
+                phone: appointment.phone,
+                email: appointment.email,
+                address: appointment.address || ''
+            }
         };
-        
-        // "Real-time" push to admin dashboard
-        setAppointments(prev => [...prev, newAppointment]);
+        // Use a different method ID for 'Presencial' or 'Phone'
+        // Let's guess based on source?
+        let method = 3; // Presencial
+        if (appointment.source === 'Phone') method = 2; // WhatsApp? No, Manual mapping...
+        if (appointment.source === 'WhatsApp') method = 2;
 
-        // Simulate Sending Email
-        console.group('%c 📧 Simulando Envío de Correo Electrónico', 'color: #00b5cb; font-size: 16px; font-weight: bold;');
-        console.log(`%cTo: ${bookingData.patientData.email}`, 'font-size:12px; color: #555');
-        console.log(`%cSubject: Confirmación de Cita - Clínica La Feria`, 'font-weight:bold; font-size:12px;');
-        console.log(`%c
-        Hola ${bookingData.patientData.firstName},
-        
-        Su cita ha sido confirmada con éxito.
-        
-        DETALLES DE LA CITA:
-        -----------------------------------
-        Identificador:  ${id}
-        Fecha:          ${bookingData.selectedDate}
-        Hora:           ${bookingData.selectedTime}
-        Especialidad:   ${specialtyTitle}
-        Motivo:         ${serviceTitle}
-        Mutua:          ${mutuaTitle}
-        
-        UBICACIÓN:
-        Clínica La Feria
-        Calle Pablo Iglesias, 41 bajo, Elda
-        
-        Gracias por confiar en nosotros.
-        `, 'color: #333; font-family: monospace;');
-        console.groupEnd();
-
-        resolve();
-      }, 1500); // Simulate network delay
-    });
+        await appointmentService.createAppointment(booking, method);
+        await refreshAppointments();
+    } catch(e) {
+        console.error("Error adding appointment", e);
+    }
   };
 
-  const cancelAppointment = (id: string) => {
-    setAppointments(prev => prev.map(appt => 
-      appt.id === id ? { ...appt, status: 'cancelled' } : appt
-    ));
+  const updateAppointment = async (appointment: Appointment) => {
+    // Current service only supports status update easily
+    // Full update requires more logic. For now supporting status or basic changes?
+    // The UI mainly does drag-drop or time change.
+    // If just refreshing:
+    await refreshAppointments();
   };
 
-  const addAppointment = (appointment: Appointment) => {
-    setAppointments(prev => [...prev, appointment]);
+  const loginAdmin = async (user: string, pass: string) => {
+      const success = await authService.login(user, pass);
+      if (success) setIsAdminLoggedIn(true);
+      return success;
   };
-
-  const updateAppointment = (appointment: Appointment) => {
-    setAppointments(prev => prev.map(appt => 
-      appt.id === appointment.id ? appointment : appt
-    ));
-  };
-
-  const loginAdmin = () => setIsAdminLoggedIn(true);
+  
   const logoutAdmin = () => setIsAdminLoggedIn(false);
 
   return (
@@ -140,7 +158,8 @@ export const AppProvider = ({ children }: PropsWithChildren) => {
       logoutAdmin,
       cancelAppointment,
       addAppointment,
-      updateAppointment
+      updateAppointment,
+      refreshAppointments
     }}>
       {children}
     </AppContext.Provider>

@@ -1,9 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context';
-import { MOCK_AVAILABILITY } from '../../constants';
 import { DayAvailability } from '../../types';
 
-// Helpers for date calculation
+// Clinic Hours Config
+const HOURS = {
+  morning: { start: 9, end: 14 },
+  afternoon: { start: 16, end: 20 }, // Mon-Thu
+  fridayAfternoon: { start: 17, end: 20 }
+};
+
+// Start of Month Calendar Generator
 const getDaysInMonth = (date: Date) => {
   const year = date.getFullYear();
   const month = date.getMonth();
@@ -11,7 +17,6 @@ const getDaysInMonth = (date: Date) => {
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
 
-  // Monday-based start
   const dayOfWeek = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
   for (let i = dayOfWeek; i > 0; i--) {
     days.push({ date: new Date(year, month, 1 - i), isCurrentMonth: false });
@@ -30,13 +35,9 @@ const getDaysInMonth = (date: Date) => {
 };
 
 export const Step2Availability: React.FC = () => {
-  const { bookingData, updateBookingData, setBookingStep } = useApp();
+  const { bookingData, updateBookingData, setBookingStep, appointments } = useApp();
   const [currentPivotDate, setCurrentPivotDate] = useState(new Date());
 
-  // Derive days (Always Month view for patients)
-  const calendarDays = useMemo(() => getDaysInMonth(currentPivotDate), [currentPivotDate]);
-
-  // Use local date string to avoid timezone issues
   const formatDateStr = (date: Date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -44,17 +45,65 @@ export const Step2Availability: React.FC = () => {
     return `${year}-${month}-${day}`;
   };
 
-  const handleDayClick = (date: Date) => {
-    const dayOfWeek = date.getDay();
-    // Block Saturday (6) and Sunday (0)
-    if (dayOfWeek === 6 || dayOfWeek === 0) return;
-
+  // Generate Availability Logic
+  const generateDayAvailability = (date: Date) => {
+    const dayOfWeek = date.getDay(); // 0 Sun, 6 Sat
     const dateStr = formatDateStr(date);
-    const dayData = MOCK_AVAILABILITY.find(d => d.date === dateStr);
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+    if (isWeekend) return { status: 'closed', slots: [] };
+
+    // Generate Slots
+    let slots: { time: string, available: boolean }[] = [];
     
-    if (dayData?.status === 'closed') return;
+    // Morning: 09:00 - 13:30 (Last slot)
+    for (let h = HOURS.morning.start; h < HOURS.morning.end; h++) {
+        slots.push({ time: `${String(h).padStart(2,'0')}:00`, available: true });
+        slots.push({ time: `${String(h).padStart(2,'0')}:30`, available: true });
+    }
+
+    // Afternoon
+    const afternoonStart = dayOfWeek === 5 ? HOURS.fridayAfternoon.start : HOURS.afternoon.start;
+    const afternoonEnd = dayOfWeek === 5 ? HOURS.fridayAfternoon.end : HOURS.afternoon.end;
+
+    for (let h = afternoonStart; h < afternoonEnd; h++) {
+        slots.push({ time: `${String(h).padStart(2,'0')}:00`, available: true });
+        slots.push({ time: `${String(h).padStart(2,'0')}:30`, available: true });
+    }
+
+    // Check Availability against Context Appointments
+    const dayAppointments = appointments.filter(a => a.date === dateStr && (a.status === 'confirmed' || a.status === 'checked-in'));
     
-    updateBookingData({ selectedDate: dateStr, selectedTime: null });
+    slots = slots.map(slot => {
+        // Simple check: if any appointment starts at this time
+        // Note: Real implementation might check duration overlap
+        const taken = dayAppointments.some(a => {
+            const apptTime = a.time?.substring(0, 5); // Ensure HH:MM
+            const slotTime = slot.time.substring(0, 5);
+            return apptTime === slotTime;
+        });
+        return { ...slot, available: !taken };
+    });
+
+    const isFull = slots.every(s => !s.available);
+    const status = isFull ? 'full' : 'available';
+
+    return { status, slots };
+  };
+
+  // Derive days with availability
+  const calendarDays = useMemo(() => {
+    return getDaysInMonth(currentPivotDate).map(day => ({
+        ...day,
+        availability: generateDayAvailability(day.date)
+    }));
+  }, [currentPivotDate, appointments]); // Re-calc when appointments change
+
+  const handleDayClick = (date: Date) => {
+    const dayData = generateDayAvailability(date);
+    if (dayData.status === 'closed') return;
+    
+    updateBookingData({ selectedDate: formatDateStr(date), selectedTime: null });
   };
 
   const navigate = (direction: number) => {
@@ -63,7 +112,9 @@ export const Step2Availability: React.FC = () => {
     setCurrentPivotDate(newDate);
   };
 
-  const selectedDayObj = MOCK_AVAILABILITY.find(d => d.date === bookingData.selectedDate);
+  const selectedDayAvailability = bookingData.selectedDate 
+    ? generateDayAvailability(new Date(bookingData.selectedDate))
+    : null;
 
   return (
     <div className="animate-in fade-in slide-in-from-right-8 duration-500 max-w-full overflow-hidden">
@@ -86,7 +137,7 @@ export const Step2Availability: React.FC = () => {
       </div>
 
       <div className="grid lg:grid-cols-12 gap-8">
-        {/* Calendar Section (Google Calendar Style) */}
+        {/* Calendar Section */}
         <div className="lg:col-span-8 bg-white p-2 md:p-6 rounded-2xl border border-gray-200 shadow-sm">
            <div className="flex justify-between items-center mb-6 px-2">
               <h3 className="text-lg font-bold capitalize text-gray-800 flex items-center gap-2">
@@ -112,13 +163,10 @@ export const Step2Availability: React.FC = () => {
                const dateStr = formatDateStr(dayObj.date);
                const isSelected = bookingData.selectedDate === dateStr;
                const isToday = dayObj.date.toDateString() === new Date().toDateString();
-               const dayData = MOCK_AVAILABILITY.find(d => d.date === dateStr);
                
-               const dayOfWeek = dayObj.date.getDay();
-               const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-               
-               const isAvailable = !isWeekend && dayData?.status === 'available';
-               const isClosed = isWeekend || dayData?.status === 'closed';
+               const { status } = dayObj.availability;
+               const isAvailable = status === 'available';
+               const isClosed = status === 'closed';
 
                return (
                  <button
@@ -138,7 +186,6 @@ export const Step2Availability: React.FC = () => {
                      {dayObj.date.getDate()}
                    </span>
                    
-                   {/* Availability Status Indicator - Minimalist Dot */}
                    {!isClosed && (
                      <div className="mt-1 h-1.5 flex justify-center">
                         {isSelected ? null : (
@@ -155,7 +202,6 @@ export const Step2Availability: React.FC = () => {
              })}
            </div>
 
-           {/* Legend */}
            <div className="flex flex-wrap gap-4 mt-6 px-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-green-500"></div>Disponible</div>
              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-red-400"></div>Completo</div>
@@ -163,7 +209,7 @@ export const Step2Availability: React.FC = () => {
            </div>
         </div>
 
-        {/* Time Slots Section (Centered logic handled by parent grid and flex) */}
+        {/* Time Slots Section */}
         <div className="lg:col-span-4 space-y-4">
            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-full">
               <div className="p-5 border-b border-gray-100 bg-gray-50/50">
@@ -192,7 +238,7 @@ export const Step2Availability: React.FC = () => {
                         <span className="text-[10px] font-bold uppercase tracking-widest">Mañana</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        {selectedDayObj?.slots.filter(s => parseInt(s.time) < 14).map(slot => (
+                        {selectedDayAvailability?.slots.filter(s => parseInt(s.time) < 14).map(slot => (
                           <button
                             key={slot.time}
                             disabled={!slot.available}
@@ -207,9 +253,6 @@ export const Step2Availability: React.FC = () => {
                             {slot.time}
                           </button>
                         ))}
-                        {selectedDayObj?.slots.filter(s => parseInt(s.time) < 14).length === 0 && (
-                          <p className="col-span-2 text-center py-4 text-xs text-gray-400">Sin huecos por la mañana</p>
-                        )}
                       </div>
                     </div>
                     
@@ -220,7 +263,7 @@ export const Step2Availability: React.FC = () => {
                         <span className="text-[10px] font-bold uppercase tracking-widest">Tarde</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        {selectedDayObj?.slots.filter(s => parseInt(s.time) >= 14).map(slot => (
+                        {selectedDayAvailability?.slots.filter(s => parseInt(s.time) >= 14).map(slot => (
                           <button
                             key={slot.time}
                             disabled={!slot.available}
@@ -235,9 +278,6 @@ export const Step2Availability: React.FC = () => {
                             {slot.time}
                           </button>
                         ))}
-                        {selectedDayObj?.slots.filter(s => parseInt(s.time) >= 14).length === 0 && (
-                          <p className="col-span-2 text-center py-4 text-xs text-gray-400">Sin huecos por la tarde</p>
-                        )}
                       </div>
                     </div>
                   </div>

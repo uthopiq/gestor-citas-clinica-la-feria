@@ -1,12 +1,42 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context';
-import { MUTUAS, VISIT_TYPES } from '../../constants';
+import { catalogService } from '../../services/catalogService';
+import { DbMutua, DbServicio, DbEspecialidad } from '../../types';
 
 export const Step3Confirmation: React.FC = () => {
   const { bookingData, updateBookingData, submitAppointment, setBookingStep } = useApp();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   
+  // Catalog State for Summary
+  const [mutuaName, setMutuaName] = useState('');
+  const [serviceName, setServiceName] = useState('');
+  const [specialtyName, setSpecialtyName] = useState('');
+
+  useEffect(() => {
+    const loadDetails = async () => {
+        if (bookingData.company) {
+            const mutuas = await catalogService.getMutuas();
+            const m = mutuas.find(x => x.id_mutua === bookingData.company);
+            if (m) setMutuaName(m.nombre);
+        }
+        if (bookingData.specialty) {
+            const specialties = await catalogService.getEspecialidades();
+            const s = specialties.find(x => x.id_especialidad === bookingData.specialty);
+            if (s) setSpecialtyName(s.nombre);
+        }
+        // For service, we might need to fetch services based on specialty/mutua if we want to be precise,
+        // or just fetch all services if the API supports it, or use the one we selected.
+        // Assuming we can get services list efficiently or we just re-fetch context relevant services.
+        if (bookingData.reason && bookingData.specialty) {
+            const services = await catalogService.getServicios(bookingData.specialty, bookingData.company || undefined);
+            const s = services.find(x => x.id_servicio === bookingData.reason);
+            if (s) setServiceName(s.nombre);
+        }
+    };
+    loadDetails();
+  }, [bookingData.company, bookingData.specialty, bookingData.reason]);
+
   // Consent state
   const [consents, setConsents] = useState({
     privacy: false,
@@ -72,9 +102,6 @@ export const Step3Confirmation: React.FC = () => {
     setIsSubmitting(false);
     setSuccess(true);
   };
-
-  const selectedMutua = MUTUAS.find(c => c.id === bookingData.company);
-  const selectedReason = VISIT_TYPES.find(r => r.id === bookingData.reason);
 
   if (success) {
     return (
@@ -324,8 +351,8 @@ export const Step3Confirmation: React.FC = () => {
                     <span className="material-symbols-outlined">medical_services</span>
                   </div>
                   <div>
-                    <p className="font-bold text-gray-800">{selectedReason?.title}</p>
-                    <p className="text-sm text-gray-500 capitalize">{bookingData.specialty}</p>
+                    <p className="font-bold text-gray-800">{serviceName || 'Servicio seleccionado'}</p>
+                    <p className="text-sm text-gray-500 capitalize">{specialtyName || 'Especialidad seleccionada'}</p>
                   </div>
                </div>
 
@@ -346,8 +373,8 @@ export const Step3Confirmation: React.FC = () => {
                     <span className="material-symbols-outlined">corporate_fare</span>
                   </div>
                   <div>
-                    <p className="font-bold text-gray-800">{selectedMutua?.title}</p>
-                    <p className="text-sm text-gray-500">{selectedMutua?.subtitle}</p>
+                    <p className="font-bold text-gray-800">{mutuaName || 'Mutua seleccionada'}</p>
+                    <p className="text-sm text-gray-500">Compañía Aseguradora</p>
                   </div>
                </div>
             </div>
