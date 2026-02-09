@@ -107,6 +107,14 @@ export const AdminDashboard: React.FC = () => {
     const dayOfWeek = date.getDay();
     if (dayOfWeek === 0 || dayOfWeek === 6) return; // Prevent clicks on weekends
     
+    // Prevent clicks on past dates
+    const checkDate = new Date(date);
+    checkDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (checkDate < today) return;
+    
     setNewAppointmentPreData({ date: formatDateStr(date), time });
     setEditingAppointment(null); // Ensure we are not editing
     setIsNewAppointmentOpen(true);
@@ -135,23 +143,34 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleSaveAppointment = (apptData: Partial<Appointment>) => {
-    if (apptData.id) {
-        // Update existing
-        updateAppointment(apptData as Appointment);
-        // Refresh selected appointment if it was the one edited
-        if (selectedAppointment && selectedAppointment.id === apptData.id) {
-            setSelectedAppointment(apptData as Appointment);
+  const handleSaveAppointment = async (apptData: Partial<Appointment>) => {
+    try {
+        if (apptData.id) {
+            // Update existing
+            await updateAppointment(apptData as Appointment);
+            // Refresh selected appointment if it was the one edited
+            if (selectedAppointment && selectedAppointment.id === apptData.id) {
+                setSelectedAppointment(apptData as Appointment);
+            }
+        } else {
+            // Create new
+            const newAppt: Appointment = {
+                ...apptData,
+                // We don't generate ID here anymore, service handles it for 'Cita Web' flow.
+                // But for Admin flow, we pass a BookingBookingState-like object to service?
+                // Context's addAppointment constructs the BookingState.
+                // Let's rely on Context -> Service flow.
+                id: `LF-${Math.floor(Math.random() * 100000)}` // Temporary FE ID, service will overwrite or ignores it?
+                // Actually service.createAppointment ignores the ID passed in 'booking' usually, it generates it.
+                // Service uses `booking` object.
+            } as Appointment;
+            await addAppointment(newAppt);
         }
-    } else {
-        // Create new
-        const newAppt: Appointment = {
-            ...apptData,
-            id: `LF-${Math.floor(Math.random() * 100000)}`
-        } as Appointment;
-        addAppointment(newAppt);
+        setIsNewAppointmentOpen(false);
+    } catch (error) {
+        console.error("Error saving appointment:", error);
+        alert("Error al guardar la cita. Verifique los datos o la conexión.");
     }
-    setIsNewAppointmentOpen(false);
   };
 
   const startOfCurrentWeek = getStartOfWeek(currentDate);
@@ -439,7 +458,7 @@ export const AdminDashboard: React.FC = () => {
                      <div>
                         <h3 className="text-xl font-bold text-gray-900 leading-tight">{selectedAppointment.patientName}</h3>
                         <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-bold">{selectedAppointment.id}</span>
+                          <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-bold">{selectedAppointment.codigo_cita || selectedAppointment.id}</span>
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getSourceStyles(selectedAppointment.source)}`}>{selectedAppointment.source}</span>
                         </div>
                      </div>

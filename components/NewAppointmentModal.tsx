@@ -400,6 +400,10 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         alert("Debe seleccionar o crear un paciente.");
         return;
     }
+    if (!formData.reason || formData.reason <= 0) {
+        alert("Por favor seleccione un servicio/motivo de consulta válido.");
+        return;
+    }
 
     const companyTitle = mutuas.find(m => m.id_mutua === formData.company)?.nombre || '';
     const specialtyTitle = specialties.find(s => s.id_especialidad === formData.specialty)?.nombre || '';
@@ -418,11 +422,9 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       // so the context can extract them.
       
       // Pass the raw form data IDs for the backend service:
-      // @ts-ignore
+      // Pass the raw form data IDs for the backend service:
       rawCompanyId: formData.company,
-      // @ts-ignore
       rawSpecialtyId: formData.specialty,
-      // @ts-ignore
       rawServiceId: formData.reason,
       
       specialty: specialtyTitle,
@@ -705,6 +707,10 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                         <input 
                           type="date" 
                           required
+                          min={!appointmentToEdit ? (() => {
+                            const d = new Date();
+                            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                          })() : undefined}
                           value={formData.date}
                           onChange={(e) => {
                             setFormData({...formData, date: e.target.value, time: ''});
@@ -794,9 +800,11 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                             onChange={(e) => setFormData({...formData, company: Number(e.target.value)})}
                             className="w-full p-2.5 bg-white border border-gray-200 rounded-lg text-sm appearance-none focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                           >
-                             {mutuas.map(m => <option key={m.id_mutua} value={m.id_mutua}>{m.nombre}</option>)}
+                             {mutuas.map(m => (
+                               <option key={m.id_mutua} value={m.id_mutua}>{m.nombre}</option>
+                             ))}
                           </select>
-                          <span className="material-symbols-outlined absolute right-3 top-2.5 text-gray-400 pointer-events-none text-lg">expand_more</span>
+                          <span className="material-symbols-outlined absolute right-3 top-3 text-gray-400 pointer-events-none text-sm">expand_more</span>
                         </div>
                       </div>
 

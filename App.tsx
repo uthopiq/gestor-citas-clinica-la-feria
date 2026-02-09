@@ -7,7 +7,7 @@ import { Step3Confirmation } from './views/Patient/Step3Confirmation';
 import { AdminDashboard } from './views/Admin/AdminDashboard';
 
 const Header = ({ isAdmin }: { isAdmin: boolean }) => {
-  const { logoutAdmin } = useApp();
+  const { logoutAdmin, currentUser } = useApp();
 
   return (
     <header className={`${isAdmin ? 'bg-dark-header text-white' : 'bg-white border-b border-gray-200'} h-16 px-6 md:px-10 flex items-center justify-between sticky top-0 z-50 transition-colors`}>
@@ -24,15 +24,15 @@ const Header = ({ isAdmin }: { isAdmin: boolean }) => {
           {isAdmin && (
              <div className="flex items-center gap-3">
                <div className="text-right hidden sm:block">
-                 <p className="text-xs font-semibold">Dr. Julian Smith</p>
-                 <p className="text-[10px] text-slate-400">Admin</p>
+                 <p className="text-xs font-semibold">{currentUser?.nombre_completo || 'Usuario'}</p>
+                 <p className="text-[10px] text-slate-400 capitalize">{currentUser?.username || 'Admin'}</p>
                </div>
-               <div className="w-8 h-8 rounded-full bg-slate-500 bg-cover bg-center" style={{backgroundImage: 'url(https://picsum.photos/100)'}}></div>
+               {/* Image Removed as requested */}
                
                {/* Mobile Logout Button */}
                <button 
                  onClick={logoutAdmin}
-                 className="md:hidden flex items-center justify-center w-9 h-9 bg-white/10 rounded-full text-white hover:bg-red-500 hover:text-white transition-all shadow-sm active:scale-95"
+                 className="flex items-center justify-center w-9 h-9 bg-gray-100 rounded-full text-gray-500 hover:bg-red-50 hover:text-red-500 transition-all shadow-sm active:scale-95"
                  title="Cerrar Sesión"
                >
                   <span className="material-symbols-outlined text-lg">logout</span>

@@ -106,7 +106,7 @@ export const Step1Config: React.FC = () => {
       <details className="group border border-gray-200 rounded-xl bg-white overflow-hidden transition-all" open={!bookingData.company}>
         <summary className="flex items-center justify-between p-5 cursor-pointer list-none hover:bg-gray-50 transition-colors">
           <div className="flex items-center gap-4">
-            <div className={`p-2 rounded-full transition-colors ${bookingData.company ? 'bg-green-500 text-white shadow-md' : 'bg-primary/10 text-primary'}`}>
+            <div className={`w-10 h-10 flex items-center justify-center shrink-0 rounded-full transition-colors ${bookingData.company ? 'bg-green-500 text-white shadow-md' : 'bg-primary/10 text-primary'}`}>
                <span className="material-symbols-outlined">{bookingData.company ? 'check' : 'corporate_fare'}</span>
             </div>
             <div className="flex flex-col items-start">
@@ -157,7 +157,7 @@ export const Step1Config: React.FC = () => {
       <details className="group border border-gray-200 rounded-xl bg-white overflow-hidden transition-all" open={!!bookingData.company && (bookingData.specialty === undefined || bookingData.specialty === null)}>
         <summary className="flex items-center justify-between p-5 cursor-pointer list-none hover:bg-gray-50 transition-colors">
           <div className="flex items-center gap-4">
-            <div className={`p-2 rounded-full transition-colors ${bookingData.specialty !== undefined && bookingData.specialty !== null ? 'bg-green-500 text-white shadow-md' : 'bg-primary/10 text-primary'}`}>
+            <div className={`w-10 h-10 flex items-center justify-center shrink-0 rounded-full transition-colors ${bookingData.specialty !== undefined && bookingData.specialty !== null ? 'bg-green-500 text-white shadow-md' : 'bg-primary/10 text-primary'}`}>
                <span className="material-symbols-outlined">{bookingData.specialty !== undefined && bookingData.specialty !== null ? 'check' : 'stethoscope'}</span>
             </div>
             <div className="flex flex-col items-start">
@@ -204,7 +204,7 @@ export const Step1Config: React.FC = () => {
       <details className="group border border-gray-200 rounded-xl bg-white overflow-hidden transition-all" open={bookingData.specialty !== undefined && bookingData.specialty !== null && !bookingData.reason}>
         <summary className="flex items-center justify-between p-5 cursor-pointer list-none hover:bg-gray-50 transition-colors">
           <div className="flex items-center gap-4">
-             <div className={`p-2 rounded-full transition-colors ${bookingData.reason ? 'bg-green-500 text-white shadow-md' : 'bg-primary/10 text-primary'}`}>
+             <div className={`w-10 h-10 flex items-center justify-center shrink-0 rounded-full transition-colors ${bookingData.reason ? 'bg-green-500 text-white shadow-md' : 'bg-primary/10 text-primary'}`}>
                <span className="material-symbols-outlined">{bookingData.reason ? 'check' : 'event_note'}</span>
             </div>
             <div className="flex flex-col items-start">

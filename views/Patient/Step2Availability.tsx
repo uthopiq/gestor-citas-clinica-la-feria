@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context';
-import { DayAvailability } from '../../types';
+import { DayAvailability, Appointment } from '../../types';
+import { appointmentService } from '../../services/appointmentService';
 
 // Clinic Hours Config
 const HOURS = {
@@ -37,6 +38,40 @@ const getDaysInMonth = (date: Date) => {
 export const Step2Availability: React.FC = () => {
   const { bookingData, updateBookingData, setBookingStep, appointments } = useApp();
   const [currentPivotDate, setCurrentPivotDate] = useState(new Date());
+  const [monthAppointments, setMonthAppointments] = useState<Appointment[]>([]);
+
+  // Fetch appointments for the visible month
+  React.useEffect(() => {
+      const loadMonthAppointments = async () => {
+          const year = currentPivotDate.getFullYear();
+          const month = currentPivotDate.getMonth();
+          
+          // Calculate start and end of the grid (including padding days)
+          const firstDayOfMonth = new Date(year, month, 1);
+          const lastDayOfMonth = new Date(year, month + 1, 0);
+          
+          // Start date: Start of the week for the first day
+          const startDate = new Date(firstDayOfMonth);
+          const dayOfWeek = startDate.getDay() === 0 ? 6 : startDate.getDay() - 1; // Mon=0
+          startDate.setDate(startDate.getDate() - dayOfWeek);
+          
+          // End date: End of the week for the last day (plus potential next month rows)
+          // The grid is 6 rows * 7 cols = 42 days fixed in logic below
+          const endDate = new Date(startDate);
+          endDate.setDate(endDate.getDate() + 42);
+          
+          try {
+              const startStr = startDate.toISOString().split('T')[0];
+              const endStr = endDate.toISOString().split('T')[0];
+              const data = await appointmentService.getAppointmentsByRange(startStr, endStr);
+              setMonthAppointments(data);
+          } catch (error) {
+              console.error("Error loading month appointments", error);
+          }
+      };
+      
+      loadMonthAppointments();
+  }, [currentPivotDate]);
 
   const formatDateStr = (date: Date) => {
     const year = date.getFullYear();
@@ -46,7 +81,16 @@ export const Step2Availability: React.FC = () => {
   };
 
   // Generate Availability Logic
+  // Generate Availability Logic
   const generateDayAvailability = (date: Date) => {
+    // Prevent past dates
+    const checkDate = new Date(date);
+    checkDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (checkDate < today) return { status: 'closed', slots: [] };
+
     const dayOfWeek = date.getDay(); // 0 Sun, 6 Sat
     const dateStr = formatDateStr(date);
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
@@ -71,12 +115,12 @@ export const Step2Availability: React.FC = () => {
         slots.push({ time: `${String(h).padStart(2,'0')}:30`, available: true });
     }
 
-    // Check Availability against Context Appointments
-    const dayAppointments = appointments.filter(a => a.date === dateStr && (a.status === 'confirmed' || a.status === 'checked-in'));
+    // Check Availability against Month Appointments (fetched dynamically)
+    // We filter by date string
+    const dayAppointments = monthAppointments.filter(a => a.date === dateStr && a.status !== 'cancelled');
     
     slots = slots.map(slot => {
         // Simple check: if any appointment starts at this time
-        // Note: Real implementation might check duration overlap
         const taken = dayAppointments.some(a => {
             const apptTime = a.time?.substring(0, 5); // Ensure HH:MM
             const slotTime = slot.time.substring(0, 5);
@@ -97,7 +141,7 @@ export const Step2Availability: React.FC = () => {
         ...day,
         availability: generateDayAvailability(day.date)
     }));
-  }, [currentPivotDate, appointments]); // Re-calc when appointments change
+  }, [currentPivotDate, monthAppointments]); // Re-calc when monthAppointments change
 
   const handleDayClick = (date: Date) => {
     const dayData = generateDayAvailability(date);

@@ -29,6 +29,7 @@ export interface DbCliente {
 
 export interface DbCita {
   id: string; // UUID
+  codigo_cita?: string; // Custom ID: CLF-DDMMYYHHMM
   fecha: string; // YYYY-MM-DD
   hora: string; // HH:MM:SS
   cliente_dni: string;
@@ -42,6 +43,13 @@ export interface DbCita {
   motivo_eliminacion?: string;
   eliminado_por?: string | null;
   fecha_eliminacion?: string;
+}
+
+export interface User {
+  id_usuario: string;
+  username: string;
+  nombre_completo: string;
+  role: string;
 }
 
 // Frontend mapped types (keeping some for compatibility but updated sources)
@@ -100,6 +108,11 @@ export interface Appointment extends DbCita {
   email?: string;
   address?: string;
   source?: string; // Maps to id_metodo name
+
+  // Admin/Manual Entry specific
+  rawCompanyId?: number;
+  rawSpecialtyId?: number;
+  rawServiceId?: number;
 }
 
 export type Patient = PatientData;

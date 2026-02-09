@@ -94,13 +94,22 @@ export const Step3Confirmation: React.FC = () => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const [appointmentId, setAppointmentId] = useState<string | null>(null);
+
   const handleSubmit = async () => {
     if (!validate()) return;
     
     setIsSubmitting(true);
-    await submitAppointment();
-    setIsSubmitting(false);
-    setSuccess(true);
+    try {
+      const id = await submitAppointment();
+      setAppointmentId(id);
+      setIsSubmitting(false);
+      setSuccess(true);
+    } catch (error) {
+      console.error("Error submitting appointment:", error);
+      setIsSubmitting(false);
+      alert("Hubo un error al procesar la cita. Por favor, inténtelo de nuevo.");
+    }
   };
 
   if (success) {
@@ -112,7 +121,7 @@ export const Step3Confirmation: React.FC = () => {
         <h2 className="text-3xl font-bold text-gray-900 mb-2">¡Cita Confirmada!</h2>
         <p className="text-gray-500 max-w-md mb-8">
           Hemos enviado los detalles a <strong>{bookingData.patientData.email}</strong>. 
-          Su código de cita es <span className="font-mono bg-gray-100 px-2 py-1 rounded">LF-{Math.floor(Math.random()*10000)}</span>
+          Su código de cita es: <span className="font-mono bg-gray-100 px-2 py-1 rounded font-bold">{appointmentId || 'Pendiente'}</span>
         </p>
         <button 
           onClick={() => window.location.reload()} 

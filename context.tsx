@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, ReactNode, useEffect, PropsWithChildren } from 'react';
-import { BookingState, Appointment } from './types';
+import { BookingState, Appointment, User } from './types';
 import { INITIAL_APPOINTMENTS, MUTUAS, SPECIALTIES, VISIT_TYPES } from './constants';
 import { appointmentService } from './services/appointmentService';
 import { authService } from './services/authService';
@@ -11,11 +11,12 @@ interface AppContextType {
   setBookingStep: (step: number) => void;
   bookingData: BookingState;
   updateBookingData: (data: Partial<BookingState>) => void;
-  submitAppointment: () => Promise<void>;
+  submitAppointment: () => Promise<string>;
   
   // Admin Flow State
   appointments: Appointment[];
   isAdminLoggedIn: boolean;
+  currentUser: User | null;
   loginAdmin: (user: string, pass: string) => Promise<boolean>;
   logoutAdmin: () => void;
   cancelAppointment: (id: string) => Promise<void>;
@@ -48,6 +49,7 @@ export const AppProvider = ({ children }: PropsWithChildren) => {
   const [bookingData, setBookingData] = useState<BookingState>(initialBookingState);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   const updateBookingData = (data: Partial<BookingState>) => {
     setBookingData(prev => ({ ...prev, ...data }));
@@ -71,11 +73,13 @@ export const AppProvider = ({ children }: PropsWithChildren) => {
 
   const submitAppointment = async () => {
       // Connect to Real Backend
-      await appointmentService.createAppointment(bookingData, 1); // 1 = Web
+      const result = await appointmentService.createAppointment(bookingData, 1); // 1 = Web
       await refreshAppointments();
       
-      // Simulate confirmation email log
-      console.log(`Cita confirmada para: ${bookingData.patientData.email}`);
+      // Return the custom code for display, fall back to ID if missing
+      const displayCode = result.codigo_cita || result.id;
+      console.log(`Cita confirmada para: ${bookingData.patientData.email} con ID: ${displayCode}`);
+      return displayCode;
   };
 
   const cancelAppointment = async (id: string) => {
@@ -92,18 +96,14 @@ export const AppProvider = ({ children }: PropsWithChildren) => {
   const addAppointment = async (appointment: Appointment) => {
     try {
         // This is primarily called by Admin Dashboard with a constructed object
-        // We need to map it back to BookingState-like structure for the service
-        // OR we should expose a direct create method for Admin that takes explicit IDs
+        // Map back to BookingState-like structure for the service
         
-        // For now, assuming the Modal passes mapped IDs in the 'appointment' object fields?
-        // Actually AdminDashboard constructs a mock Appointment.
-        // We need to change AdminDashboard to pass proper IDs.
-        // But to keep interface simple, let's assume we refresh after add.
-        // Or we reconstruct a booking object:
          const booking: BookingState = {
-            company: 1, // Fallback or need to map string to ID
-            specialty: 1, 
-            reason: 1,
+            // Use raw IDs passed from NewAppointmentModal
+            company: appointment.rawCompanyId || 1, // Default to 1 (Adeslas?) or -1 (Privado) if missing? UI defaults to mutuas[0]
+            specialty: appointment.rawSpecialtyId || 0, 
+            reason: appointment.rawServiceId || 0,
+            
             selectedDate: appointment.date,
             selectedTime: appointment.time,
             patientData: {
@@ -116,16 +116,23 @@ export const AppProvider = ({ children }: PropsWithChildren) => {
                 address: appointment.address || ''
             }
         };
-        // Use a different method ID for 'Presencial' or 'Phone'
-        // Let's guess based on source?
-        let method = 3; // Presencial
-        if (appointment.source === 'Phone') method = 2; // WhatsApp? No, Manual mapping...
-        if (appointment.source === 'WhatsApp') method = 2;
 
-        await appointmentService.createAppointment(booking, method);
+        // Map Source String to ID
+        // 1: Web, 2: WhatsApp, 3: Presencial, 4: Phone (Llamada IA)
+        let methodId = 1;
+        switch(appointment.source) {
+            case 'Web': methodId = 1; break;
+            case 'WhatsApp': methodId = 2; break;
+            case 'Presencial': methodId = 3; break;
+            case 'Phone': methodId = 4; break;
+            default: methodId = 1;
+        }
+
+        await appointmentService.createAppointment(booking, methodId);
         await refreshAppointments();
     } catch(e) {
         console.error("Error adding appointment", e);
+        throw e; // Rethrow so UI can show error
     }
   };
 
@@ -138,12 +145,19 @@ export const AppProvider = ({ children }: PropsWithChildren) => {
   };
 
   const loginAdmin = async (user: string, pass: string) => {
-      const success = await authService.login(user, pass);
-      if (success) setIsAdminLoggedIn(true);
-      return success;
+      const userData = await authService.login(user, pass);
+      if (userData) {
+          setIsAdminLoggedIn(true);
+          setCurrentUser(userData);
+          return true;
+      }
+      return false;
   };
   
-  const logoutAdmin = () => setIsAdminLoggedIn(false);
+  const logoutAdmin = () => {
+      setIsAdminLoggedIn(false);
+      setCurrentUser(null);
+  }
 
   return (
     <AppContext.Provider value={{
@@ -154,6 +168,7 @@ export const AppProvider = ({ children }: PropsWithChildren) => {
       submitAppointment,
       appointments,
       isAdminLoggedIn,
+      currentUser,
       loginAdmin,
       logoutAdmin,
       cancelAppointment,
