@@ -124,29 +124,31 @@ export const Step1Config: React.FC = () => {
         </summary>
         <div className="p-5 pt-0 border-t border-transparent group-open:border-gray-100">
           <p className="text-sm text-gray-500 mb-4 mt-4">Seleccione su compañía aseguradora:</p>
-          <div className="grid md:grid-cols-2 gap-4">
-            {mutuas.map((mutua) => (
-              <label 
-                key={mutua.id_mutua}
-                className={`relative flex items-center p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                  bookingData.company === mutua.id_mutua ? 'border-primary bg-primary/5 shadow-sm' : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <input 
-                  type="radio"
-                  name="company" 
-                  className="hidden" 
-                  checked={bookingData.company === mutua.id_mutua} 
-                  onChange={() => updateBookingData({ company: mutua.id_mutua, specialty: undefined, reason: undefined })}
-                />
-                <div className="flex-1">
-                  <div className="font-bold text-sm text-gray-800">{mutua.nombre}</div>
-                </div>
-                {bookingData.company === mutua.id_mutua && (
-                  <span className="material-symbols-outlined text-primary ml-auto scale-110">check_circle</span>
-                )}
-              </label>
-            ))}
+          <div className="max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+            <div className="grid md:grid-cols-2 gap-4 pb-2">
+              {mutuas.map((mutua) => (
+                <label 
+                  key={mutua.id_mutua}
+                  className={`relative flex items-center p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                    bookingData.company === mutua.id_mutua ? 'border-primary bg-primary/5 shadow-sm' : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <input 
+                    type="radio"
+                    name="company" 
+                    className="hidden" 
+                    checked={bookingData.company === mutua.id_mutua} 
+                    onChange={() => updateBookingData({ company: mutua.id_mutua, specialty: undefined, reason: undefined })}
+                  />
+                  <div className="flex-1">
+                    <div className="font-bold text-sm text-gray-800">{mutua.nombre}</div>
+                  </div>
+                  {bookingData.company === mutua.id_mutua && (
+                    <span className="material-symbols-outlined text-primary ml-auto scale-110">check_circle</span>
+                  )}
+                </label>
+              ))}
+            </div>
           </div>
         </div>
       </details>
@@ -173,20 +175,27 @@ export const Step1Config: React.FC = () => {
         </summary>
         <div className="p-5 pt-0 border-t border-transparent group-open:border-gray-100">
           <p className="text-sm text-gray-500 mb-4 mt-4">Indique el área médica:</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {specialties.map((spec) => (
-              <button
-                key={spec.id_especialidad}
-                onClick={() => updateBookingData({ specialty: spec.id_especialidad, reason: undefined })}
-                className={`px-4 py-3 text-sm rounded-lg border transition-all ${
-                  bookingData.specialty === spec.id_especialidad 
-                    ? 'bg-primary text-white border-primary shadow-md transform scale-[1.02]' 
-                    : 'border-gray-200 text-gray-700 hover:border-primary hover:text-primary'
-                }`}
-              >
-                {spec.nombre}
-              </button>
-            ))}
+          <div className="max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+            <div className="grid md:grid-cols-2 gap-3 pb-2">
+              {specialties.map((spec) => (
+                <button
+                  key={spec.id_especialidad}
+                  onClick={() => updateBookingData({ specialty: spec.id_especialidad, reason: undefined })}
+                   className={`relative flex items-center p-4 rounded-lg border-2 cursor-pointer transition-all text-left ${
+                    bookingData.specialty === spec.id_especialidad 
+                      ? 'border-primary bg-primary/5 shadow-sm' 
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex-1">
+                    <div className="font-bold text-sm text-gray-800">{spec.nombre}</div>
+                  </div>
+                  {bookingData.specialty === spec.id_especialidad && (
+                    <span className="material-symbols-outlined text-primary ml-auto scale-110">check_circle</span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </details>
@@ -213,28 +222,31 @@ export const Step1Config: React.FC = () => {
         </summary>
         <div className="p-5 pt-0 border-t border-transparent group-open:border-gray-100">
           <p className="text-sm text-gray-500 mb-4 mt-4">Seleccione el tipo de consulta:</p>
-           <div className="grid md:grid-cols-2 gap-3">
-            {services.map((type) => (
-              <button
-                key={type.id_servicio}
-                onClick={() => updateBookingData({ reason: type.id_servicio })}
-                className={`px-4 py-3 text-left rounded-lg border transition-all flex items-center justify-between ${
-                  bookingData.reason === type.id_servicio 
-                    ? 'bg-primary text-white border-primary shadow-md transform scale-[1.02]' 
-                    : 'border-gray-200 text-gray-700 hover:border-primary hover:text-primary'
-                }`}
-              >
-                <div>
-                   <div className="font-bold text-sm">{type.nombre}</div>
-                   <div className={`text-xs ${bookingData.reason === type.id_servicio ? 'text-white/80' : 'text-gray-400'}`}>Duración: {type.duracion} min</div>
-                </div>
-                {bookingData.reason === type.id_servicio && (
-                  <span className="material-symbols-outlined">check</span>
-                )}
-              </button>
-            ))}
-            {services.length === 0 && <p className="col-span-2 text-center text-gray-400">Seleccione especialidad para ver servicios</p>}
-          </div>
+           <div className="max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+             <div className="grid md:grid-cols-2 gap-3 pb-2">
+              {services.map((type) => (
+                <button
+                  key={type.id_servicio}
+                  onClick={() => updateBookingData({ reason: type.id_servicio })}
+                  className={`px-4 py-3 text-left rounded-lg border transition-all flex items-center justify-between ${
+                    bookingData.reason === type.id_servicio 
+                      ? 'bg-primary text-white border-primary shadow-md transform scale-[1.02]' 
+                      : 'border-gray-200 text-gray-700 hover:border-primary hover:text-primary'
+                  }`}
+                >
+                  <div>
+                    <div className="font-bold text-sm">{type.nombre}</div>
+                    <div className={`text-xs ${bookingData.reason === type.id_servicio ? 'text-white/80' : 'text-gray-400'}`}>Duración: {type.duracion} min</div>
+                  </div>
+                  {bookingData.reason === type.id_servicio && (
+                    <span className="material-symbols-outlined">check</span>
+                  )}
+                </button>
+              ))}
+            </div>
+           </div>
+            {services.length === 0 && <p className="text-center text-gray-400 mt-4">Seleccione especialidad para ver servicios</p>}
+
         </div>
       </details>
 
